@@ -19,9 +19,8 @@ int stash(char *file) {
     unsigned char buf[fileEnd - fileStart];
     pread(fd, buf, fileEnd - fileStart, 0);
 
-    for(int i = 0; i < sizeof buf; i++){
+    for (int i = 0; i < sizeof buf; i++)
         buf[i] -= key[i % strlen(key)];
-    }
 
     pwrite(fd, buf, fileEnd - fileStart, 0);
     return 0;
@@ -36,7 +35,7 @@ int restore(char *file) {
     unsigned char buf[fileEnd - fileStart];
     pread(fd, buf, fileEnd - fileStart, 0);
 
-    for(int i = 0; i < sizeof buf; i++){
+    for (int i = 0; i < sizeof buf; i++) {
         buf[i] += key[i % strlen(key)];
     }
 
