@@ -18,8 +18,8 @@ const char *getTypeName(int typeNumber) {
 
 int main() {
     // Получаем путь
-    char path[256];
-    getcwd(path, 256);
+    char path[PATH_MAX];
+    getcwd(path, PATH_MAX);
 
     // Открываем директорию
     DIR* dir = opendir(path);
@@ -32,16 +32,10 @@ int main() {
         return 1;
     }
 
-    printf("Имя файла              Тип\n");
+    printf("Имя файла               Тип\n");
     dirent *file;
     while ((file = readdir(dir)) != nullptr) {
-        // Заполняем имя файла для выравнивания
-        char name[24] = { ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ','\0' };
-        // Переносим имя
-        for (int i = 0; i < 23 and file->d_name[i] != '\0';i++)
-                name[i] = file->d_name[i];
-        // Выводим результат
-        printf("%s%i:%s\n", name, file->d_type, getTypeName(file->d_type));
+        printf("%-23s %i:%s\n", file->d_name, file->d_type, getTypeName(file->d_type));
     }
 
     return 0;
