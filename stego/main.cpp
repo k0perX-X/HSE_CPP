@@ -5,7 +5,7 @@
 
 const unsigned char marker[] = {0xFF, 0xD9};
 const int markerSize = 2;
-const size_t nBuf = 16777216;
+const size_t nBuf = 16777216; // задает размер буфера для записи и чтения файла
 
 off_t getMarkerPoint(unsigned char *buf, int fd, off_t fileHole, off_t fileData, off_t fileEnd) {
     off_t markerPoint;
