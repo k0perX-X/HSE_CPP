@@ -1,161 +1,205 @@
 #include <iostream>
-#include <sys/stat.h>
 #include <cstring>
 #include <unistd.h>
 #include <fcntl.h>
 
-const char *key = "d24bf82cca5ef32953ed66aea9770fa8";
-const unsigned char keySize = 32;
+const unsigned char marker[] = {0xFF, 0xD9};
+const int markerSize = 2;
+const size_t nBuf = 16777216;
 
-const unsigned char commentMarker[] = {0xFF, 0xFE};
-const unsigned char commentMarkerSize = 2;
-const unsigned char dataEndMarker[] = {(unsigned char)(0x00 ^ key[0]), (unsigned char)(0x00 ^ key[1])}; // не может быть в строке, так как невозможно передать аргументом
-const unsigned char dataEndMarkerSize = 2;
+off_t getMarkerPoint(unsigned char *buf, int fd, off_t fileHole, off_t fileData, off_t fileEnd) {
+    off_t markerPoint;
+    off_t bufSize;
+    off_t cursor = fileData;
+    do {
+        if ((bufSize = fileHole - cursor) > nBuf)
+            bufSize = nBuf;
+        if (bufSize == 0) {
+            if (cursor == fileEnd)
+                return cursor;
+            fileData = lseek(fd, cursor, SEEK_DATA);
+            fileHole = lseek(fd, fileData, SEEK_HOLE);
+            continue;
+        }
+        pread(fd, buf, bufSize, cursor);
+        off_t i = 0;
+        for (; i < bufSize; i++) {
+            int j = 0;
+            for (; buf[i + j] == marker[j] and j < markerSize; j++);
+            if (j == markerSize)
+                break;
+        }
+        markerPoint = i + cursor;
+        cursor += bufSize;
+    } while (markerPoint == cursor);
+    return markerPoint + markerSize;
+}
+
+int save_from_stdin(char *filename) {
+    int fd;
+    if ((fd = open(filename, O_RDWR)) == -1) {
+        fprintf(stderr, "Ошибка открытия файла\n");
+        return 2;
+    }
+    auto *buf = (unsigned char *) malloc(nBuf);
+
+    off_t fileData = lseek(fd, 0, SEEK_DATA);
+    off_t fileEnd = lseek(fd, fileData, SEEK_END);
+    off_t fileHole = lseek(fd, fileData, SEEK_HOLE);
+    off_t pointer = getMarkerPoint(buf, fd, fileHole, fileData, fileEnd);
+
+    if (pointer != fileEnd) {
+        fprintf(stderr, "Данные уже записаны\n");
+        return 3;
+    }
+
+    size_t n;
+    while ((n = fread(buf, 1, nBuf, stdin)) > 0) {
+        ssize_t wrote = pwrite(fd, buf, n, lseek(fd, 0, SEEK_END));
+        while (wrote != n) {
+            n -= wrote;
+            wrote = pwrite(fd, buf + nBuf - n, n, lseek(fd, 0, SEEK_END));
+        }
+        if (wrote == -1) {
+            fprintf(stderr, "Ошибка записи\n");
+            free(buf);
+            close(fd);
+            return 3;
+        }
+    }
+
+    if (n == -1) {
+        fprintf(stderr, "Данные не найдены\n");
+        free(buf);
+        return 1;
+    }
+
+    free(buf);
+    close(fd);
+    return 0;
+}
+
+int save_from_argv(char *filename, int argc, char *argv[]) {
+    int fd;
+    if ((fd = open(filename, O_RDWR)) == -1) {
+        fprintf(stderr, "Ошибка открытия файла\n");
+        return 2;
+    }
+    auto *buf = (unsigned char *) malloc(nBuf);
+
+    off_t fileData = lseek(fd, 0, SEEK_DATA);
+    off_t fileEnd = lseek(fd, fileData, SEEK_END);
+    off_t fileHole = lseek(fd, fileData, SEEK_HOLE);
+    off_t pointer = getMarkerPoint(buf, fd, fileHole, fileData, fileEnd);
+    free(buf);
+
+    if (pointer != fileEnd) {
+        fprintf(stderr, "Данные уже записаны\n");
+        return 1;
+    }
+
+    for (int i = 3; i < argc; i++) {
+        size_t n = strlen(argv[i]);
+        ssize_t wrote = pwrite(fd, argv[i], n, lseek(fd, 0, SEEK_END));
+        while (wrote != n) {
+            n -= wrote;
+            wrote = pwrite(fd, argv[i] + strlen(argv[i]) - n, n, lseek(fd, 0, SEEK_END));
+        }
+        if (wrote == -1) {
+            fprintf(stderr, "Ошибка записи\n");
+            close(fd);
+            return 3;
+        }
+    }
+
+    close(fd);
+    return 0;
+}
+
+int read_data(char *filename) {
+    int fd;
+    if ((fd = open(filename, O_RDONLY)) == -1) {
+        fprintf(stderr, "Ошибка открытия файла\n");
+        return 2;
+    };
+
+    off_t fileData = lseek(fd, 0, SEEK_DATA);
+    off_t fileEnd = lseek(fd, fileData, SEEK_END);
+    off_t fileHole = lseek(fd, fileData, SEEK_HOLE);
+
+    auto *buf = (unsigned char *) malloc(nBuf);
+    off_t cursor = getMarkerPoint(buf, fd, fileHole, fileData, fileEnd);
+
+    if (cursor == fileEnd) {
+        fprintf(stderr, "Данные не найдены\n");
+        free(buf);
+        return 1;
+    }
+
+    off_t bufSize;
+    while (cursor != fileEnd) {
+        if ((bufSize = fileHole - cursor) > nBuf)
+            bufSize = nBuf;
+        if (bufSize == 0) {
+            fileData = lseek(fd, cursor, SEEK_DATA);
+            fileHole = lseek(fd, fileData, SEEK_HOLE);
+            continue;
+        }
+        pread(fd, buf, bufSize, cursor);
+        fwrite(buf, bufSize, 1, stdout);
+        cursor += bufSize;
+    }
+
+    close(fd);
+    free(buf);
+    return 0;
+}
+
+int delete_data(char *filename) {
+
+    int fd;
+    if ((fd = open(filename, O_RDWR)) == -1) {
+        fprintf(stderr, "Ошибка открытия файла\n");
+        return 2;
+    }
+    auto *buf = (unsigned char *) malloc(nBuf);
+
+    off_t fileData = lseek(fd, 0, SEEK_DATA);
+    off_t fileEnd = lseek(fd, fileData, SEEK_END);
+    off_t fileHole = lseek(fd, fileData, SEEK_HOLE);
+    off_t cursor = getMarkerPoint(buf, fd, fileHole, fileData, fileEnd);
+
+    if (cursor == fileEnd) {
+        fprintf(stderr, "Данные не найдены\n");
+        free(buf);
+        return 1;
+    }
+
+    ftruncate(fd, cursor);
+
+    close(fd);
+    free(buf);
+    return 0;
+}
 
 void printHelp() {
-    printf("stego [s/r/d] [filename.jpg] [data]\n");
-}
-
-unsigned long findMarker(const unsigned char *buf, unsigned long bufSize,
-                         const unsigned char *marker = commentMarker, unsigned long markerSize = commentMarkerSize,
-                         unsigned long offset = 0) {
-    unsigned long i = offset;
-    for (; i < bufSize; i++) {
-        int j = 0;
-        for (; buf[i + j] == marker[j] and j < markerSize; j++);
-        if (j == markerSize)
-            break;
-    }
-    return i;
-}
-
-bool checkData(const char *data, unsigned long dataSize) {
-    for (int i = 0; i < dataSize; i++) {
-        if (data[i] == (char) 0xFF)
-            return false;
-    }
-    return true;
-}
-
-int save(const char *file, const char *data) {
-    int fd = open(file, O_RDWR);
-
-    off_t fileStart = lseek(fd, 0, SEEK_SET);
-    off_t fileEnd = lseek(fd, 0, SEEK_END);
-
-    unsigned long bufSize = fileEnd - fileStart;
-    unsigned char buf[bufSize];
-    pread(fd, buf, fileEnd - fileStart, 0);
-
-    unsigned long position = findMarker(buf, bufSize);
-    bool notFound = position == bufSize;
-    unsigned long dataSize = strlen(data);
-    unsigned long newBufSize = dataSize + bufSize + dataEndMarkerSize;
-    if (notFound) {
-        position -= commentMarkerSize;
-        newBufSize += commentMarkerSize;
-    }
-    unsigned char newBuf[newBufSize];
-    unsigned long i = 0;
-    for (; i < position; i++)
-        newBuf[i] = buf[i];
-    for (; i < position + commentMarkerSize; i++)
-        newBuf[i] = commentMarker[i - (position)];
-    for (; i < dataSize + position + commentMarkerSize; i++)
-        newBuf[i] = data[i - (position + commentMarkerSize)] ^ key[(i - (position + commentMarkerSize)) % keySize];
-    for (; i < position + commentMarkerSize + dataSize + dataEndMarkerSize; i++)
-        newBuf[i] = dataEndMarker[i - (position + commentMarkerSize + dataSize)];
-    for (; i < newBufSize; i++)
-        newBuf[i] = buf[i - (newBufSize - bufSize)];
-
-    pwrite(fd, newBuf, newBufSize, 0);
-    close(fd);
-    return 0;
-}
-
-int read(char *file) {
-    int fd = open(file, O_RDWR);
-
-    off_t fileStart = lseek(fd, 0, SEEK_SET);
-    off_t fileEnd = lseek(fd, 0, SEEK_END);
-
-    unsigned long bufSize = fileEnd - fileStart;
-    unsigned char buf[bufSize];
-    pread(fd, buf, fileEnd - fileStart, 0);
-    close(fd);
-
-    unsigned long position = findMarker(buf, bufSize);
-    unsigned long endPosition = findMarker(buf, bufSize, dataEndMarker, dataEndMarkerSize, position);
-
-    if (position == bufSize or endPosition == bufSize) {
-        printf("Данные не найдены");
-        return 2;
-    }
-
-    while (endPosition != bufSize){
-        for (unsigned long i = position + commentMarkerSize; i < endPosition; i++) {
-            printf("%c", buf[i] ^ key[(i - (position + commentMarkerSize)) % keySize]);
-        }
-        printf("\n");
-        position = endPosition;
-        endPosition = findMarker(buf, bufSize, dataEndMarker, dataEndMarkerSize, endPosition + dataEndMarkerSize);
-    }
-    return 0;
-}
-
-int del(char *file) {
-    int fd = open(file, O_RDWR);
-
-    off_t fileStart = lseek(fd, 0, SEEK_SET);
-    off_t fileEnd = lseek(fd, 0, SEEK_END);
-
-    unsigned long bufSize = fileEnd - fileStart;
-    unsigned char buf[bufSize];
-    pread(fd, buf, fileEnd - fileStart, 0);
-
-    unsigned long position = findMarker(buf, bufSize);
-    unsigned long endPosition = findMarker(buf, bufSize, dataEndMarker, dataEndMarkerSize, position);
-
-    if (position == bufSize or endPosition == bufSize) {
-        printf("Данные не найдены");
-        return 2;
-    }
-
-    unsigned long startPosition = position;
-    while (endPosition != bufSize) {
-        position = endPosition;
-        endPosition = findMarker(buf, bufSize, dataEndMarker, dataEndMarkerSize, endPosition + dataEndMarkerSize);
-    }
-    endPosition = position + dataEndMarkerSize;
-
-    bool anotherComments = buf[endPosition] != 0xFF;
-    if (anotherComments) {
-        startPosition += commentMarkerSize;
-    }
-
-    unsigned long delDataSize = endPosition - startPosition;
-    unsigned long newBufSize = bufSize - delDataSize;
-    unsigned char newBuf[newBufSize];
-    for (unsigned long i = 0; i < startPosition; i++)
-        newBuf[i] = buf[i];
-    for (unsigned long i = endPosition; i < bufSize; i++)
-        newBuf[i - delDataSize] = buf[i];
-
-    pwrite(fd, newBuf, newBufSize, 0);
-    ftruncate(fd, (long)newBufSize);
-    close(fd);
-    return 0;
+    fprintf(stderr, "stego [s/r/d] [filename.jpg] [data ...]\n");
 }
 
 int main(int argc, char *argv[]) {
-    if (argv[1][0] == 's' and argc == 4) {
-        if (!checkData(argv[3], strlen(argv[3])))
-            return 127;
-        return save(argv[2], argv[3]);
-    } else if (argv[1][0] == 'r' and argc == 3) {
-        return read(argv[2]);
-    } else if (argv[1][0] == 'd' and argc == 3) {
-        return del(argv[2]);
+    if (argc < 3) {
+        printHelp();
+        return 1;
+    }
+
+    if (argv[1][0] == 's' and argc == 3) {
+        return save_from_stdin(argv[2]);
+    } else if (argv[1][0] == 's') {
+        return save_from_argv(argv[2], argc, argv);
+    } else if (argv[1][0] == 'r') {
+        return read_data(argv[2]);
+    } else if (argv[1][0] == 'd') {
+        return delete_data(argv[2]);
     } else {
         printHelp();
         return 1;
