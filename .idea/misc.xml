@@ -3,7 +3,8 @@
   <component name="CMakePythonSetting">
     <option name="pythonIntegrationState" value="YES" />
   </component>
-  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/chat">
+  <component name="CMakeWorkspace" PROJECT_DIR="$PROJECT_DIR$/keylogger_daemon">
     <contentRoot DIR="$PROJECT_DIR$" />
   </component>
+  <component name="WestSettings">{}</component>
 </project>
