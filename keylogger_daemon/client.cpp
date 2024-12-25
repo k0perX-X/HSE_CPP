@@ -23,9 +23,9 @@
 #define PORT 10501
 #define ADDRESS "127.0.0.1"
 #define INTERVAL 5000
-#define MAX_KEYS_STORE 1000
+#define MAX_KEYS_STORE 100
 #define SEPARATOR '\n'
-#define PID_FILE_NAME "client.pid"
+#define PID_FILE_NAME "/var/run/client.pid"
 
 const std::vector<std::string> keycodes = {
         "RESERVED",
@@ -145,7 +145,7 @@ void sigint_handler(int sig) {
 void set_signals_handlers() {
 //    signal(SIGKILL, sigint_handler);
 //    signal(SIGABRT, sigint_handler);
-    signal(SIGILL, sigint_handler);
+//    signal(SIGILL, sigint_handler);
 //    signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
 }
@@ -311,7 +311,7 @@ int start_daemon() {
 }
 
 void stop_daemon() {
-    kill(read_pid(), SIGILL);
+    kill(read_pid(), SIGTERM);
 }
 
 int main(int argc, char *argv[]) {

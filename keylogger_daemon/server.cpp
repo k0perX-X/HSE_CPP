@@ -25,8 +25,8 @@
 #include <sys/param.h>
 
 #define PORT 10501
-#define MAX_KEYS_STORE 1000
-#define PID_FILE_NAME "server.pid"
+#define MAX_KEYS_STORE 100
+#define PID_FILE_NAME "/var/run/server.pid"
 #define LOG_DIR "./keys/"
 
 [[noreturn]] void close_program();
@@ -39,7 +39,7 @@ void sigint_handler(int sig) {
 void set_signals_handlers() {
 //    signal(SIGKILL, sigint_handler);
 //    signal(SIGABRT, sigint_handler);
-    signal(SIGILL, sigint_handler);
+//    signal(SIGILL, sigint_handler);
 //    signal(SIGINT, sigint_handler);
     signal(SIGTERM, sigint_handler);
 }
@@ -195,7 +195,7 @@ void start_daemon() {
 }
 
 void stop_daemon() {
-    kill(read_pid(), SIGILL);
+    kill(read_pid(), SIGTERM);
 }
 
 int main(int argc, char *argv[]) {
