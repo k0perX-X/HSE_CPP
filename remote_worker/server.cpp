@@ -336,7 +336,7 @@ void cmd_handler(char *buffer, struct sockaddr_in from) {
 }
 
 void print_help() {
-    std::cout << "server [start/stop/status]" << '\n';
+    std::cout << "server_runner [start/stop/status]" << '\n';
 }
 
 void start_daemon() {
@@ -358,7 +358,7 @@ void stop_daemon() {
 }
 
 int main(int argc, char *argv[]) {
-    daemon();
+//    daemon();
 
     if (argc != 2) {
         print_help();

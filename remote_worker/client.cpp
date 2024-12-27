@@ -83,7 +83,7 @@ Receive recv_answer() {
         throw std::runtime_error("bind");
 
     Receive receive;
-    std::map<SENT_TYPE, std::vector<char>> errs, outs;
+    std::map<SENT_TYPE, std::string> errs, outs;
 
     bool full_out_received = false, full_err_received = false, exit_code_received = false;
     auto buffer = (char *) malloc(MAX_SIZE);
@@ -106,9 +106,7 @@ Receive recv_answer() {
             SENT_TYPE sent;
             memcpy(&sent, (letter.substr(STDOUT_PREFIX.size()).c_str()), sizeof sent);
 
-            outs[sent] = std::vector<char>(letter.size() - STDOUT_PREFIX_WITH_SENT_SIZE);
-            memcpy(outs[sent].data(), (letter.substr(STDOUT_PREFIX_WITH_SENT_SIZE).c_str()),
-                   outs[sent].size());
+            outs[sent] = letter.substr(STDOUT_PREFIX_WITH_SENT_SIZE);
 
         } else if (letter.starts_with(STDERR_PREFIX)) {
             if (size != MAX_SIZE)
@@ -117,9 +115,8 @@ Receive recv_answer() {
             SENT_TYPE sent;
             memcpy(&sent, (letter.substr(STDERR_PREFIX.size()).c_str()), sizeof sent);
 
-            errs[sent] = std::vector<char>(letter.size() - STDERR_PREFIX_WITH_SENT_SIZE);
-            memcpy(errs[sent].data(), (letter.substr(STDERR_PREFIX_WITH_SENT_SIZE).c_str()),
-                   errs[sent].size());
+            errs[sent] = letter.substr(STDERR_PREFIX_WITH_SENT_SIZE);
+
         } else if (letter.starts_with(EXIT_PREFIX)) {
             exit_code_received = true;
             auto exit_code_str = letter.substr(EXIT_PREFIX.size());
@@ -131,7 +128,7 @@ Receive recv_answer() {
     SENT_TYPE point = 0;
     while (not outs.empty()) {
         if (!outs[point].empty())
-            receive.out += std::string(outs[point].data());
+            receive.out += outs[point];
         auto size = outs[point].size();
         outs.erase(point);
         point += size + STDOUT_PREFIX_WITH_SENT_SIZE;
@@ -140,7 +137,7 @@ Receive recv_answer() {
     point = 0;
     while (not errs.empty()) {
         if (!errs[point].empty())
-            receive.out += std::string(errs[point].data());
+            receive.out += errs[point];
         auto size = errs[point].size();
         errs.erase(point);
         point += size + STDERR_PREFIX_WITH_SENT_SIZE;
@@ -150,7 +147,7 @@ Receive recv_answer() {
 }
 
 void print_help() {
-    std::cout << "client address port command [args...]\nFor stdin use output redirection" << '\n';
+    std::cout << "client_runner address port command [args...]\nFor stdin use output redirection" << '\n';
 }
 
 int main(int argc, char *argv[]) {
